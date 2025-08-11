@@ -47,7 +47,6 @@ def frame_processor_thread(q):
         except queue.Empty:
             continue
 
-# --- Nova Thread para a Câmera Térmica ---
 def thermal_camera_thread(ser_port):
     global thermal_frame
 
@@ -74,7 +73,6 @@ def generate_video_stream():
         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         time.sleep(1/60)
 
-# --- Novo Gerador de Stream para a Câmera Térmica ---
 def generate_thermal_stream():
     global thermal_frame
     while True:
@@ -83,7 +81,6 @@ def generate_thermal_stream():
         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         time.sleep(1/60)
 
-# --- Configuração do App Web ---
 app = Flask(__name__)
 socketio = SocketIO(app)
 
@@ -91,11 +88,14 @@ socketio = SocketIO(app)
 def index():
     return render_template('index.html')
 
+@app.route('/info')
+def info():
+    return render_template('info.html')
+
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_video_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# --- Nova Rota para a Câmera Térmica ---
 @app.route('/thermal_feed')
 def thermal_feed():
     return Response(generate_thermal_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
