@@ -1,23 +1,23 @@
 import RPi.GPIO as GPIO
 import time
+import threading
+import datetime
 
 # --- Configuração dos Pinos ---
-# Use a numeração BCM para os pinos GPIO
 DIR_PIN = 20    # Pino de Direção (Direction)
 STEP_PIN = 21   # Pino de Passo (Step)
 
 # --- Configuração do Motor ---
 # 200 passos para uma volta completa (motor de 1.8 graus/passo)
 PASSOS_POR_ROTACAO = 200
-
-# --- Configuração do Programa ---
-ROTACAO_GRAUS = 45.0         # Aumentei para 90 graus para o movimento ser bem visível
-VELOCIDADE_DELAY = 0.009     # <<<< ESTE É O AJUSTE MAIS IMPORTANTE! Velocidade alta.
+VELOCIDADE_DELAY = 0.009
 
 # --- Inicialização ---
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(DIR_PIN, GPIO.OUT)
 GPIO.setup(STEP_PIN, GPIO.OUT)
+
+timerMotor = None
 
 def girarMotor(graus, direcao):
     print("Iniciando o controle do motor. \n")
@@ -36,3 +36,29 @@ def girarMotor(graus, direcao):
     finally:
         GPIO.cleanup()
         print("GPIOs limpos. Fim do programa. \n")
+
+
+def agendar_alimentador(hora, minuto, rotacao):
+    agora = datetime.datetime.now()
+    horario_execucao = agora.replace(hour=hora, minute=minuto, second=0, microsecond=0)
+
+    if agora > horario_execucao:
+        horario_execucao += datetime.timedelta(days=1)
+
+    intervalo_em_segundos = (horario_execucao - agora).total_seconds()
+    print(f"Tarefa agendada para: {horario_execucao.strftime('%d/%m/%Y às %H:%M:%S')}")
+    print(f"O timer vai aguardar por {intervalo_em_segundos:.2f} segundos.")
+
+    timer_agendador = threading.Timer(intervalo_em_segundos, girarMotor, args=(rotacao, 0))
+    timerMotor = timer_agendador.start()
+
+
+def desativar_alimentador():
+    if timerMotor and timerMotor.is_alive():
+        timerMotor.cancel()
+        print("[INFO] Agendamento anterior cancelado.")
+
+
+def reagendar_alimentador(hora, minuto, rotacao):
+    desativar_alimentador()
+    agendar_alimentador(hora, minuto, rotacao)
