@@ -1,8 +1,10 @@
 import cv2
 import numpy as np
-import time
 from collections import deque
 from datetime import datetime
+from picamera2 import Picamera2
+import queue
+import time
 
 time_last_file_read = 0
 drinking_water_status = "Aguardando..."
@@ -75,3 +77,37 @@ def process_frame(img):
     cv2.putText(img, f"Movimento: {movement_status}", (380, 465), font, 0.6, color_movement, 2, cv2.LINE_AA)
 
     return img
+
+def camera_capture_thread(q):
+    picam2 = Picamera2()
+    config = picam2.create_preview_configuration(main={"size": (640, 480)}, controls={"FrameRate": 10})
+    picam2.configure(config)
+    picam2.start()
+    while True:
+        img = picam2.capture_array()
+        img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        if not q.full():
+            q.put(img_bgr)
+
+
+def frame_processor_thread(q, processed_frame_lock):
+    global processed_frame
+    while True:
+        try:
+            raw_frame = q.get()
+            annotated_frame = process_frame(raw_frame)
+            ret, buffer = cv2.imencode('.jpg', annotated_frame)
+            if ret:
+                with processed_frame_lock:
+                    processed_frame = buffer.tobytes()
+        except queue.Empty:
+            continue
+
+
+def generate_video_stream(processed_frame_lock):
+    global processed_frame
+    while True:
+        with processed_frame_lock:
+            frame_bytes = processed_frame
+        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        time.sleep(1/60)

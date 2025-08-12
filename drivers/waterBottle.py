@@ -1,5 +1,3 @@
-# drivers/waterBottle.py
-
 from gpiozero import Button
 import threading
 import traceback
