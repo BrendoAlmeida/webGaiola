@@ -14,69 +14,108 @@ last_known_position = (0, 0)
 last_processed_position = (0, 0)
 block_R, block_G, block_B = 196, 120, 170
 font = cv2.FONT_HERSHEY_SIMPLEX
+status = queue.Queue()
 
-def process_frame(img):
-    """
-    Recebe um frame de vídeo (imagem), aplica toda a detecção e os visuais,
-    e retorna o frame processado.
-    """
-    global time_last_file_read, drinking_water_status, movement_status
-    global path_history, last_known_position, last_processed_position
+lower = np.array([0, 0, 0])
+upper = np.array([179, 255, 40])
+RESIZE_FACTOR = 1
+largura_grafico = 640
 
-    # --- Lógica de Leitura de Arquivo Otimizada ---
-    # current_time_sec = time.time()
-    # if current_time_sec - time_last_file_read > 1.0:
-    #     try:
-    #         with open('water_data_file.dat', 'r') as file:
-    #             drinking_water_status = file.read().strip()
-    #     except FileNotFoundError:
-    #         drinking_water_status = "Arquivo N/A"
-    #     time_last_file_read = current_time_sec
+def configurar_filtro_kalman(dt):
+    kf = cv2.KalmanFilter(4, 2)
+    kf.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
+    kf.transitionMatrix = np.array([[1, 0, dt, 0], [0, 1, 0, dt], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)
+    Q = 1e-2
+    R = 1e-1
+    kf.processNoiseCov = np.eye(4, dtype=np.float32) * Q
+    kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * R
+    return kf
 
-    # --- Lógica de Detecção com as Cores Originais ---
-    lower_bound_dark = np.array([26, 6, 41])
-    upper_bound_dark = np.array([69, 39, 89])
-    mask = cv2.inRange(img, lower_bound_dark, upper_bound_dark)
-    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        if cv2.contourArea(largest_contour) > 500:
-            M = cv2.moments(largest_contour)
-            if M["m00"] != 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
-                last_known_position = (cx, cy)
-                path_history.appendleft(last_known_position)
+def process_frame(img, time, mostrar_dados_video=True):
+    if not status:
+        data_point = {
+            "mouse": 1,
+            "video_moment": time.time(),
+            "pos_x": 0,
+            "pos_y": 0,
+            "vel_x": 0,
+            "vel_y": 0,
+            "acc_x": 0,
+            "acc_y": 0,
+        }
+        status.put(data_point)
+        return img
 
-                dist = np.sqrt((cx - last_processed_position[0])**2 + (cy - last_processed_position[1])**2)
-                movement_status = "EM MOVIMENTO" if dist > 15 else "PARADO"
-                last_processed_position = (cx, cy)
+    altura, largura = (int(img.shape[0] * RESIZE_FACTOR), int(img.shape[1] * RESIZE_FACTOR))
+    dt = time - status[-1]["video_moment"]
 
-    # --- Desenho de Todos os Elementos Visuais ---
-    # Bordas de bloqueio
-    cv2.rectangle(img, (1, 1), (500, 45), (block_B, block_G, block_R), -1)
-    cv2.rectangle(img, (500, 1), (650, 65), (block_B, block_G, block_R), -1)
-    # Barra de status inferior
-    cv2.rectangle(img, (0, 440), (640, 480), (0, 0, 0), -1)
+    pontos_rastro, camada_rastro = deque(maxlen=64), np.zeros((altura, largura, 3), dtype=np.uint8)
+    fator_desvanecimento = 0.92
+    vel_vetorial_anterior = None
+    pixels_por_metro = 150 * RESIZE_FACTOR
 
-    # Rastro e círculo no objeto
-    for i in range(1, len(path_history)):
-        cv2.line(img, path_history[i - 1], path_history[i], (0, 255, 0), 2)
-    cv2.circle(img, last_known_position, 15, (0, 0, 255), 2)
+    frame = cv2.resize(img, (largura, altura), interpolation=cv2.INTER_AREA)
 
-    # Textos
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    cv2.putText(img, timestamp, (230, 30), font, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(img, "DAY TIME", (520, 30), font, 0.7, (240, 18, 25), 2, cv2.LINE_AA)
+    kf = configurar_filtro_kalman(dt)
+    predicted_state = kf.predict()
 
-    # color_drinking = (10, 20, 17) if drinking_water_status != "DRINKING" else (140, 20, 17)
-    # cv2.putText(img, f"Bebedouro: {drinking_water_status}", (10, 465), font, 0.6, color_drinking, 2, cv2.LINE_AA)
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    mascara = cv2.inRange(hsv, lower, upper)
 
-    color_movement = (25, 24, 255) if movement_status == "PARADO" else (25, 180, 25)
-    cv2.putText(img, f"Movimento: {movement_status}", (380, 465), font, 0.6, color_movement, 2, cv2.LINE_AA)
+    kernel = np.ones((5, 5), np.uint8)
+    mascara = cv2.erode(mascara, kernel, iterations=1)
+    mascara = cv2.dilate(mascara, kernel, iterations=2)
+
+    contornos, _ = cv2.findContours(mascara.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    final_state = predicted_state
+
+    if len(contornos) > 0:
+        c = max(contornos, key=cv2.contourArea)
+        if cv2.contourArea(c) > 50:
+            ((x, y), raio) = cv2.minEnclosingCircle(c)
+            if raio > 3:
+                centro_detectado = np.array([np.float32(x), np.float32(y)])
+                cv2.circle(frame, (int(x), int(y)), int(largura*0.02), (0, 0, 255), -1)
+                final_state = kf.correct(centro_detectado)
+
+    pos_estimada = (int(final_state[0]), int(final_state[1]))
+    vel_estimada_pxs = (final_state[2], final_state[3])
+    velocidade_mps = np.linalg.norm(vel_estimada_pxs) / pixels_por_metro
+
+    aceleracao_mps2 = 0.0
+    if vel_vetorial_anterior is not None:
+        delta_v = np.array(vel_estimada_pxs) - np.array(vel_vetorial_anterior)
+        aceleracao_mps2 = np.linalg.norm(delta_v / dt) / pixels_por_metro
+
+    data_point = {
+        "mouse": 1,
+        "video_moment": time.time(),
+        "pos_x": pos_estimada[0],
+        "pos_y": pos_estimada[1],
+        "vel_x": velocidade_mps[0],
+        "vel_y": velocidade_mps[1],
+        "acc_x": aceleracao_mps2[0],
+        "acc_y": aceleracao_mps2[1],
+    }
+    status.put(data_point)
+
+    cv2.circle(frame, pos_estimada, int(largura*0.02), (255, 0, 0), 2)
+    camada_rastro = (camada_rastro * fator_desvanecimento).astype(np.uint8)
+    pontos_rastro.appendleft(pos_estimada)
+
+    for i in range(1, len(pontos_rastro)):
+        if pontos_rastro[i - 1] is not None and pontos_rastro[i] is not None:
+            cv2.line(camada_rastro, pontos_rastro[i - 1], pontos_rastro[i], (0, 255, 255), 5)
+
+    resultado = cv2.add(frame, camada_rastro)
+
+    if mostrar_dados_video:
+        cv2.putText(resultado, f"Vel: {velocidade_mps:.2f} m/s", (15, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        cv2.putText(resultado, f"Acel: {aceleracao_mps2:.2f} m/s^2", (15, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
     return img
+
 
 def camera_capture_thread(q):
     picam2 = Picamera2()
@@ -95,7 +134,7 @@ def frame_processor_thread(q, processed_frame_lock):
     while True:
         try:
             raw_frame = q.get()
-            annotated_frame = process_frame(raw_frame)
+            annotated_frame = process_frame(raw_frame, time.now())
             ret, buffer = cv2.imencode('.jpg', annotated_frame)
             if ret:
                 with processed_frame_lock:

@@ -1,7 +1,7 @@
 import configparser
 
 # --- Variáveis Globais padrões para o motor ---
-HORA_ALIMENTACAO, MINUTO_ALIMENTACAO = 7, 0
+HORA_ALIMENTACAO, MINUTO_ALIMENTACAO = 12, 2
 ROTACAO_GRAUS = 45.0
 
 def init_config():

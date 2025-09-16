@@ -71,7 +71,7 @@ if __name__ == '__main__':
     threading.Thread(target=thermal_camera_thread, args=(serial_port, thermal_frame_lock), daemon=True).start()
 
     hora, minuto, rotacao = get_info_motor()
-    agendar_alimentador(hora, minuto, rotacao)
+    agendar_alimentador(12, 8, 45)
 
     print("Iniciando o servidor Flask...")
     socketio.run(app, host='0.0.0.0', port=5000)
