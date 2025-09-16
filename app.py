@@ -9,7 +9,7 @@ import serial
 import datetime
 
 from drivers.waterBottle import waterCheck, current_bebedouro_status
-from drivers.miceDetect import frame_processor_thread, camera_capture_thread, generate_video_stream
+from drivers.miceDetect import frame_processor_thread, camera_capture_thread, generate_video_stream, graph_processor_thread, generate_graph_stream
 from drivers.thermalCamera import thermal_camera_thread, generate_thermal_stream
 from drivers.motorDriver import agendar_alimentador, desativar_alimentador, reagendar_alimentador
 from system.config import init_config, get_info_motor
@@ -18,6 +18,11 @@ from system.config import init_config, get_info_motor
 frame_queue = queue.Queue(maxsize=1)
 processed_frame_lock = threading.Lock()
 processed_frame = cv2.imencode('.jpg', np.zeros((480, 640, 3), dtype=np.uint8))[1].tobytes()
+
+# --- Variáveis Globais para o grafico ---
+graph_queue = queue.Queue(maxsize=1)
+processed_graph_lock = threading.Lock()
+processed_graph = cv2.imencode('.jpg', np.zeros((480, 640, 3), dtype=np.uint8))[1].tobytes()
 
 # --- Variáveis Globais para a Câmera Térmica ---
 thermal_frame_lock = threading.Lock()
@@ -41,6 +46,11 @@ def info():
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_video_stream(processed_frame_lock), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+@app.route('/graph_feed')
+def graph_feed():
+    return Response(generate_graph_stream(processed_graph_lock), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/thermal_feed')
@@ -69,6 +79,8 @@ if __name__ == '__main__':
     threading.Thread(target=frame_processor_thread, args=(frame_queue, processed_frame_lock,), daemon=True).start()
     threading.Thread(target=waterCheck, args=(socketio,), daemon=True).start()
     threading.Thread(target=thermal_camera_thread, args=(serial_port, thermal_frame_lock), daemon=True).start()
+    threading.Thread(target=graph_processor_thread, args=(graph_queue, processed_graph_lock,), daemon=True).start()
+
 
     hora, minuto, rotacao = get_info_motor()
     agendar_alimentador(12, 8, 45)
