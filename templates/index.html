@@ -1,59 +1,18 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Monitoramento</title>
-     <link rel="stylesheet" href="styles.css">
-    <script src="socket.io.min.js"></script>
-</head>
-<body>
-<h1>Painel de Monitoramento de Gaiola</h1>
+{% extends "layout.html" %}
 
-<div class="main-container">
-    <div class="video-column">
-        <div class="panel">
-            <h2>Câmera de Detecção</h2>
-            <img class="video-feed" src="{{ url_for('video_feed') }}" alt="Câmera de Detecção">
-        </div>
-        <div class="panel">
-            <h2>Câmera Térmica</h2>
-            <img class="video-feed" src="{{ url_for('thermal_feed') }}" alt="Câmera Térmica">
-        </div>
+{% block content %}
+<div class="video-column">
+    <div class="video-panel">
+        <h2>Câmera de Detecção</h2>
+        <img class="video-feed" src="{{ url_for('video_feed') }}" alt="Câmera de Detecção">
     </div>
-    <div class="status-column">
-        <div class="panel">
-            <h2>Status do Bebedouro</h2>
-            <div id="button-status" class="status-off">
-                Aguardando...
-            </div>
-        </div>
+    <div class="video-panel">
+        <h2>Câmera Térmica</h2>
+        <img class="video-feed" src="{{ url_for('thermal_feed') }}" alt="Câmera Térmica">
+    </div>
+    <div class="video-panel">
+        <h2>Graficos</h2>
+        <img class="video-feed" src="{{ url_for('graph_feed') }}" alt="Câmera Térmica">
     </div>
 </div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const socket = io();
-        const statusElement = document.getElementById('button-status');
-
-        socket.on('connect', () => {
-            console.log('Conectado ao servidor via WebSocket!');
-        });
-
-        socket.on('button_status', function(msg) {
-            console.log('Status do bebedouro recebido: ' + msg.data);
-
-            if (msg.data.includes("DRINKING")) {
-                statusElement.textContent = 'BEBENDO';
-                statusElement.classList.remove('status-off');
-                statusElement.classList.add('status-on');
-            } else {
-                statusElement.textContent = 'PARADO';
-                statusElement.classList.remove('status-on');
-                statusElement.classList.add('status-off');
-            }
-        });
-    });
-</script>
-</body>
-</html>
+{% endblock %}

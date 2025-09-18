@@ -1,5 +1,4 @@
-# Em thermalCamera.py
-
+import time
 import numpy as np
 import cv2
 
@@ -24,6 +23,7 @@ def parse_frame(data):
     temps_raw = np.frombuffer(temp_data, dtype=np.int16)
     temps_celsius = temps_raw / 100.0
     return temps_celsius.reshape((FRAME_HEIGHT, FRAME_WIDTH))
+
 
 def process_thermal_frame(ser):
     """
@@ -74,3 +74,31 @@ def process_thermal_frame(ser):
         if ser and ser.is_open:
             ser.reset_input_buffer()
         return None
+
+
+def thermal_camera_thread(ser_port, thermal_frame_lock):
+    global thermal_frame
+
+    if ser_port:
+        ser_port.reset_input_buffer()
+        print("Buffer serial de entrada resetado.")
+
+    while True:
+        if ser_port:
+            heatmap_img = process_thermal_frame(ser_port)
+            if heatmap_img is not None:
+                ret, buffer = cv2.imencode('.jpg', heatmap_img)
+                if ret:
+                    with thermal_frame_lock:
+                        thermal_frame = buffer.tobytes()
+        # Câmeras térmicas são mais lentas, 10 FPS é mais que suficiente
+        time.sleep(0.1)
+
+
+def generate_thermal_stream(thermal_frame_lock):
+    global thermal_frame
+    while True:
+        with thermal_frame_lock:
+            frame_bytes = thermal_frame
+        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        time.sleep(1/60)
