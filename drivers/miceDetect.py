@@ -8,15 +8,6 @@ import queue
 import time
 import matplotlib.pyplot as plt
 
-time_last_file_read = 0
-drinking_water_status = "Aguardando..."
-movement_status = "PARADO"
-path_history = deque(maxlen=20)
-last_known_position = (0, 0)
-last_processed_position = (0, 0)
-block_R, block_G, block_B = 196, 120, 170
-font = cv2.FONT_HERSHEY_SIMPLEX
-
 lower = np.array([0, 0, 0])
 upper = np.array([179, 255, 40])
 RESIZE_FACTOR = 1
@@ -31,6 +22,7 @@ status = deque(maxlen=30*10)
 
 frame_ignora = 0 #TODO
 
+
 def kalman_config(dt):
     kf = cv2.KalmanFilter(4, 2)
     kf.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
@@ -43,7 +35,7 @@ def kalman_config(dt):
 
 
 def process_frame(img, time_last_frame, mostrar_dados_video=True):
-    global kf, vel_vetorial_anterior, pontos_rastro, camada_rastro
+    global kf, vel_vetorial_anterior, pontos_rastro, camada_rastro, status
     if not status:
         data_point = {
             "mouse": 1,
@@ -123,8 +115,6 @@ def process_frame(img, time_last_frame, mostrar_dados_video=True):
         "acc_m": aceleracao_mps2
     }
     status.append(data_point)
-    print(status)
-    print("-----------------")
 
     cv2.circle(frame, pos_estimada, int(largura*0.02), (255, 0, 0), 2)
     camada_rastro = (camada_rastro * fator_desvanecimento).astype(np.uint8)
@@ -185,13 +175,14 @@ def graph_processor_thread(q, processed_frame_lock):
     global graph
     while True:
         try:
-            img = create_graph(status, 480,640)
+            img = create_graph(status.copy(), 480,640)
             ret, buffer = cv2.imencode('.jpg', img)
             if ret:
                 with processed_frame_lock:
                     graph = buffer.tobytes()
         except queue.Empty:
             continue
+
 
 def generate_graph_stream(processed_frame_lock):
     global graph
@@ -203,28 +194,19 @@ def generate_graph_stream(processed_frame_lock):
 
 
 def create_graph(data, largura_grafico, altura_grafico):
-    x_data=0
-
     if not data:
         return np.zeros((altura_grafico, largura_grafico, 3), dtype=np.uint8)
-
-    lastData = data[-1]
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(largura_grafico / 100, altura_grafico / 100), dpi=100)
     fig.tight_layout(pad=3.0)
     cor_fundo_cinza = '#36393f'
 
-    tempo_atual = lastData["video_moment"]
-    data_time = max(0, tempo_atual - GRAPH_WINDOW_SECONDS*100)
-
     x, y_velo, y_acc = [], [], []
 
     for i in data:
-        x.append(x_data)
-        x_data+=1
+        x.append(i["video_moment"])
         y_velo.append(i["vel_m"])
-        y_acc.append(i["vel_m"])
-
+        y_acc.append(i["acc_m"])
 
     ax1.plot(x, y_velo, color='cyan')
     ax1.set_title("Velocidade vs. Tempo", color='white')
@@ -234,7 +216,6 @@ def create_graph(data, largura_grafico, altura_grafico):
     ax1.tick_params(axis='y', colors='white')
     ax1.grid(True, linestyle='--', alpha=0.5)
     ax1.set_facecolor(cor_fundo_cinza)
-    ax1.set_xlim(data_time, tempo_atual + 1)
 
     ax2.plot(x, y_acc, color='magenta')
     ax2.set_title("Aceleração vs. Tempo", color='white')
@@ -244,7 +225,6 @@ def create_graph(data, largura_grafico, altura_grafico):
     ax2.tick_params(axis='y', colors='white')
     ax2.grid(True, linestyle='--', alpha=0.5)
     ax2.set_facecolor(cor_fundo_cinza)
-    ax2.set_xlim(data_time, tempo_atual + 1)
 
     fig.patch.set_facecolor(cor_fundo_cinza)
     fig.canvas.draw()
