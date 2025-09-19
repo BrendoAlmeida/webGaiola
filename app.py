@@ -14,6 +14,8 @@ from drivers.thermalCamera import thermal_camera_thread, generate_thermal_stream
 from drivers.motorDriver import agendar_alimentador, desativar_alimentador, reagendar_alimentador
 from system.config import init_config, get_info_motor
 
+from data.model.DatabaseManager import DatabaseManager
+
 # --- Variáveis Globais para a Câmera Normal ---
 frame_queue = queue.Queue(maxsize=1)
 processed_frame_lock = threading.Lock()
@@ -67,6 +69,9 @@ def handle_connect():
 
 if __name__ == '__main__':
     init_config()
+
+    conn = DatabaseManager()
+    conn.setup_database()
 
     try:
         serial_port = serial.Serial('/dev/ttyS0', 115200, timeout=1)
