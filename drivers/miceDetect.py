@@ -5,8 +5,12 @@ from datetime import datetime
 from picamera2 import Picamera2
 from collections import deque
 import queue
+import threading
 import time
 import matplotlib.pyplot as plt
+from data.model.DatabaseManager import DatabaseManager
+import sqlite3
+import logging
 
 lower = np.array([0, 0, 0])
 upper = np.array([179, 255, 40])
@@ -19,6 +23,11 @@ pontos_rastro = deque(maxlen=64)
 camada_rastro = None
 GRAPH_WINDOW_SECONDS = 10
 status = deque(maxlen=30*10)
+
+dados_para_db = []
+db_queue = queue.Queue()
+
+database = DatabaseManager()
 
 frame_ignora = 0 #TODO
 
@@ -35,7 +44,7 @@ def kalman_config(dt):
 
 
 def process_frame(img, time_last_frame, mostrar_dados_video=True):
-    global kf, vel_vetorial_anterior, pontos_rastro, camada_rastro, status
+    global kf, vel_vetorial_anterior, pontos_rastro, camada_rastro, status, dados_para_db, db_queue
     if not status:
         data_point = {
             "mouse": 1,
@@ -105,16 +114,22 @@ def process_frame(img, time_last_frame, mostrar_dados_video=True):
     data_point = {
         "mouse": 1,
         "video_moment": time.time(),
-        "pos_x": pos_estimada[0],
-        "pos_y": pos_estimada[1],
-        "vel_x": vel_estimada_pxs[0],
-        "vel_y": vel_estimada_pxs[1],
-        "vel_m": aceleracao_mps2,
-        "acc_x": aceleracao_vetor[0],
-        "acc_y": aceleracao_vetor[1],
-        "acc_m": aceleracao_mps2
+        "pos_x": int(pos_estimada[0]),
+        "pos_y": int(pos_estimada[1]),
+        "vel_x": float(vel_estimada_pxs[0]),
+        "vel_y": float(vel_estimada_pxs[1]),
+        "vel_m": float(velocidade_mps),
+        "acc_x": float(aceleracao_vetor[0]),
+        "acc_y": float(aceleracao_vetor[1]),
+        "acc_m": float(aceleracao_mps2)
     }
     status.append(data_point)
+    dados_para_db.append(data_point)
+
+    if len(dados_para_db) >= 300:
+        print(f"[Process Frame] Lote de {len(dados_para_db)} pronto. Enviando para a fila do DB.")
+        db_queue.put(list(dados_para_db))
+        dados_para_db.clear()
 
     cv2.circle(frame, pos_estimada, int(largura*0.02), (255, 0, 0), 2)
     camada_rastro = (camada_rastro * fator_desvanecimento).astype(np.uint8)
@@ -147,50 +162,58 @@ def camera_capture_thread(q):
             q.put(img_bgr)
 
 
-def frame_processor_thread(q, processed_frame_lock):
-    global processed_frame, kf
+def frame_processor_thread(q_in, q_out):
+    global kf
     kf = kalman_config(dt_inicial)
+
+    print("[FrameProcessor] Thread iniciada. Aguardando frames...")
     while True:
         try:
-            raw_frame = q.get()
+            raw_frame = q_in.get()
+
             annotated_frame = process_frame(raw_frame, time.time())
+
             ret, buffer = cv2.imencode('.jpg', annotated_frame)
             if ret:
-                with processed_frame_lock:
-                    processed_frame = buffer.tobytes()
+                if q_out.full():
+                    try:
+                        q_out.get_nowait()
+                    except queue.Empty:
+                        pass
+
+                q_out.put(buffer.tobytes())
+
         except queue.Empty:
             continue
+        except Exception as e:
+            print(f"[FrameProcessor ERROR] Uma exceção ocorreu: {e}")
 
 
-def generate_video_stream(processed_frame_lock):
-    global processed_frame
-    while True:
-        with processed_frame_lock:
-            frame_bytes = processed_frame
-        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        time.sleep(1/60)
-
-
-def graph_processor_thread(q, processed_frame_lock):
-    global graph
+def graph_processor_thread(q_out):
+    """
+    Thread que gera imagens do gráfico (Produtor).
+    Cria a imagem e a coloca na fila de saída (q_out).
+    """
+    logging.info("Thread do processador de gráfico iniciada.")
     while True:
         try:
-            img = create_graph(status.copy(), 480,640)
-            ret, buffer = cv2.imencode('.jpg', img)
-            if ret:
-                with processed_frame_lock:
-                    graph = buffer.tobytes()
-        except queue.Empty:
-            continue
+            img = create_graph(status, 640, 480)
+            if img is not None:
+                ret, buffer = cv2.imencode('.jpg', img)
+                if ret:
+                    if q_out.full():
+                        try:
+                            q_out.get_nowait()
+                        except queue.Empty:
+                            pass
 
+                    q_out.put(buffer.tobytes())
 
-def generate_graph_stream(processed_frame_lock):
-    global graph
-    while True:
-        with processed_frame_lock:
-            frame_bytes = graph
-        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        time.sleep(1/60)
+            time.sleep(0.1)
+
+        except Exception as e:
+            logging.error(f"[GraphProcessor ERROR] Uma exceção ocorreu: {e}")
+            time.sleep(1)
 
 
 def create_graph(data, largura_grafico, altura_grafico):
@@ -232,3 +255,58 @@ def create_graph(data, largura_grafico, altura_grafico):
     img_argb = np.frombuffer(buf, dtype=np.uint8).reshape(fig.canvas.get_width_height()[::-1] + (4,))
     plt.close(fig)
     return cv2.cvtColor(img_argb, cv2.COLOR_BGRA2BGR)
+
+
+def insert_database(data_batch):
+    """
+    Conecta ao banco e insere um lote de dados usando executemany.
+    """
+    if not data_batch:
+        return
+
+    dados_para_inserir = [
+        (
+            item["mouse"], item["video_moment"], item["pos_x"], item["pos_y"],
+            item["vel_x"], item["vel_y"], item["acc_x"], item["acc_y"]
+        ) for item in data_batch
+    ]
+
+    # Supondo que sua tabela se chame 'movimentos' e tenha estas colunas
+    sql_insert = """
+                 INSERT INTO mouse_status (mouse_id, video_moment, pos_x, pos_y, velo_x, velo_y, \
+                                         acc_x, acc_y) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?) \
+                 """
+
+    conn = None
+    try:
+        conn = DatabaseManager.connect(database)
+        cursor = conn.cursor()
+
+        cursor.executemany(sql_insert, dados_para_inserir)
+
+        conn.commit()
+        print(f"[DB Thread] Inseriu {cursor.rowcount} registros com sucesso.")
+
+    except sqlite3.Error as e:
+        print(f"[DB Thread ERROR] Erro ao inserir dados: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+
+def database_writer_thread(q):
+    """
+    Thread que espera por dados na fila e os insere no banco.
+    """
+    print("[DB Thread] Iniciada. Aguardando dados...")
+    while True:
+        try:
+            # .get() é bloqueante
+            data_to_insert = q.get()
+
+            insert_database(data_to_insert)
+
+            q.task_done()
+        except Exception as e:
+            print(f"[DB Thread FATAL ERROR] Uma exceção ocorreu: {e}")

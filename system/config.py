@@ -11,7 +11,7 @@ def init_config():
 
 def get_info_motor():
     try:
-        return config.get('Motor', 'hora'), config.get('Motor', 'minuto'), config.get('Motor', 'rotacao')
+        return int(config.get('Motor', 'hora')), int(config.get('Motor', 'minuto')), float(config.get('Motor', 'rotacao'))
     except configparser.NoSectionError as e:
         config.add_section('Motor')
         atualizar_configuracoes()

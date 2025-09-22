@@ -1,6 +1,8 @@
 import time
 import numpy as np
 import cv2
+import queue
+import logging
 
 # --- Constantes da Câmera ---
 FRAME_WIDTH = 32
@@ -76,29 +78,35 @@ def process_thermal_frame(ser):
         return None
 
 
-def thermal_camera_thread(ser_port, thermal_frame_lock):
-    global thermal_frame
+def thermal_camera_thread(ser_port, q_out):
+    """
+    Thread da câmera térmica (Produtor).
+    Lê os dados da câmera, processa o frame e o coloca na fila de saída (q_out).
+    """
+    if not ser_port or not ser_port.is_open:
+        logging.warning("Porta serial não está disponível. Thread da câmera térmica não fará nada.")
+        return
 
-    if ser_port:
-        ser_port.reset_input_buffer()
-        print("Buffer serial de entrada resetado.")
+    ser_port.reset_input_buffer()
+    logging.info("Buffer serial de entrada resetado.")
 
     while True:
-        if ser_port:
+        try:
             heatmap_img = process_thermal_frame(ser_port)
+
             if heatmap_img is not None:
                 ret, buffer = cv2.imencode('.jpg', heatmap_img)
                 if ret:
-                    with thermal_frame_lock:
-                        thermal_frame = buffer.tobytes()
-        # Câmeras térmicas são mais lentas, 10 FPS é mais que suficiente
-        time.sleep(0.1)
+                    if q_out.full():
+                        try:
+                            q_out.get_nowait()
+                        except queue.Empty:
+                            pass
 
+                    q_out.put(buffer.tobytes())
 
-def generate_thermal_stream(thermal_frame_lock):
-    global thermal_frame
-    while True:
-        with thermal_frame_lock:
-            frame_bytes = thermal_frame
-        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        time.sleep(1/60)
+            time.sleep(0.1)
+
+        except Exception as e:
+            logging.error(f"[ThermalCamera FATAL ERROR] Uma exceção ocorreu no loop principal: {e}")
+            time.sleep(1)
