@@ -8,7 +8,7 @@ config = picam2.create_preview_configuration(main={"size": (640, 480)}, controls
 picam2.configure(config)
 
 encoder = H264Encoder(bitrate=10000000)
-output_file = "my_video.h264"
+output_file = "gravaDois4.h264"
 
 picam2.start_recording(encoder, output_file)
 

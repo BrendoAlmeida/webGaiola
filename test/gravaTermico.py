@@ -130,5 +130,5 @@ def record_thermal_video(serial_port_name, baud_rate=460800):
         cv2.destroyAllWindows()
 
 if __name__ == '__main__':
-    SERIAL_PORT = '/dev/ttyS0'
+    SERIAL_PORT = '/dev/ttyAMA0'
     record_thermal_video(SERIAL_PORT, 115200)

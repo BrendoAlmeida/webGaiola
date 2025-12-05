@@ -1,9 +1,31 @@
 {% extends "layout.html" %}
 
-{% block title %}Informações - SmartGaiola{% endblock %}
+{% block title %}Informações - Project Argus{% endblock %}
 
 {% block content %}
-<div class="panel" style="flex-grow: 1;">
-    <h2>Informações do Projeto</h2>
-</div>
+<section class="dashboard">
+    <div class="dashboard-grid">
+        <article class="glass-panel info-card">
+            <p class="hero-eyebrow">Documentação</p>
+            <h1>Informações do Projeto</h1>
+            <p class="hero-description">
+                Explore detalhes técnicos, fluxos de dados e recomendações de manutenção da Project Argus.
+            </p>
+            <ul class="insight-list">
+                <li class="insight-item">
+                    <span class="insight-label">Arquitetura</span>
+                    <span class="insight-value">Flask + OpenCV</span>
+                </li>
+                <li class="insight-item">
+                    <span class="insight-label">Sensores integrados</span>
+                    <span class="insight-value">Câmera RGB / Térmica</span>
+                </li>
+                <li class="insight-item">
+                    <span class="insight-label">Última atualização</span>
+                    <span class="insight-value">Out 2025</span>
+                </li>
+            </ul>
+        </article>
+    </div>
+</section>
 {% endblock %}

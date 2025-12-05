@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Painel de Monitoramento{% endblock %}</title>
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
@@ -13,36 +16,109 @@
     <script src="{{ url_for('static', filename='bootstrap.bundle.min.js') }}"></script>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="#">SmartGaiola</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarSupportedContent">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                <li class="nav-item">
-                    <a class="nav-link" href="/">Home</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/info">Infos</a>
-                </li>
-            </ul>
-            <div class="d-flex nav-right-buttons">
-                <div id="button-status" class="status-off">
-                    Aguardando...
-                </div>
-                <button class="btnConfig">
-                    <i class="fa-solid fa-gears"></i>
-                </button>
+<div class="app-shell">
+    <header class="top-bar glass-panel">
+        <div class="brand-block">
+            <div class="brand-icon">
+                <i class="fa-solid fa-shield-cat"></i>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">Project Argus</span>
+                <span class="brand-tagline">Monitoramento inteligente</span>
             </div>
         </div>
-    </div>
-</nav>
 
-<main class="main-container">
-    {% block content %}{% endblock %}
-</main>
+        <input id="nav-toggle" class="nav-toggle" type="checkbox" aria-label="Alternar menu">
+        <label class="menu-button" for="nav-toggle" aria-hidden="true">
+            <span class="menu-line"></span>
+            <span class="menu-line"></span>
+            <span class="menu-line"></span>
+        </label>
+
+        <nav class="nav-links" aria-label="Principal">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/info" class="nav-link">Infos</a>
+        </nav>
+
+        <div class="header-actions">
+            <div id="button-status" class="status-chip status-off" role="status" aria-live="polite">
+                Aguardando...
+            </div>
+            <button class="icon-button btnConfig" type="button" aria-label="Abrir configurações">
+                <i class="fa-solid fa-gears"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="app-main" role="main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="config-overlay" class="app-modal-overlay" hidden>
+        <div class="app-modal-backdrop" data-close-modal></div>
+        <section class="app-modal-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="config-title">
+            <header class="app-modal-header">
+                <div>
+                    <p class="card-eyebrow">Agendamento do alimentador</p>
+                    <h2 id="config-title">Configurar horário do motor</h2>
+                </div>
+                <button class="icon-button app-modal-close" type="button" aria-label="Fechar configuração" data-close-modal>
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+
+            <div class="app-modal-body">
+                <div class="schedule-summary">
+                    <div>
+                        <span class="summary-label">Horário atual</span>
+                        <span id="scheduled-time" class="summary-value">--:--</span>
+                    </div>
+                    <div>
+                        <span class="summary-label">Tempo restante</span>
+                        <span id="remaining-time" class="summary-value">--</span>
+                    </div>
+                    <div>
+                        <span class="summary-label">Rotação programada</span>
+                        <span id="scheduled-rotation" class="summary-value">--°</span>
+                    </div>
+                    <div>
+                        <span class="summary-label">Modo automático</span>
+                        <span id="auto-feed-status" class="summary-value">--</span>
+                    </div>
+                </div>
+
+                <form id="config-form" class="config-form" novalidate>
+                    <div class="form-field toggle-field">
+                        <div class="toggle-row">
+                            <span class="toggle-title">Alimentação automática</span>
+                            <span id="auto-feed-legend" class="toggle-state">--</span>
+                        </div>
+                        <label class="toggle-control" for="auto-feed-enabled">
+                            <input type="checkbox" id="auto-feed-enabled" name="auto_feed_enabled" checked>
+                            <span class="toggle-slider" aria-hidden="true"></span>
+                            <span class="toggle-caption">Executar o motor automaticamente no horário agendado</span>
+                        </label>
+                        <p class="field-hint">Desative para suspender o agendamento automático sem perder os horários configurados.</p>
+                    </div>
+                    <div class="form-field">
+                        <label for="config-time">Horário desejado</label>
+                        <input type="time" id="config-time" name="time" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="config-rotation">Rotação (graus)</label>
+                        <input type="number" id="config-rotation" name="rotation" min="1" step="0.5" required>
+                    </div>
+                    <div class="form-feedback" id="config-feedback" role="alert" aria-live="polite"></div>
+                    <div class="form-actions">
+                        <button class="ghost-button" type="button" data-close-modal>Cancelar</button>
+                        <button class="ghost-button" type="button" id="run-motor-now">Girar agora</button>
+                        <button class="primary-button" type="submit">Salvar agendamento</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+</div>
 
 <script src="{{ url_for('static', filename='main.js') }}"></script>
 </body>

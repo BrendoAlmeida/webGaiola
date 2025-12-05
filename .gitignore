@@ -1,1 +1,9 @@
 .idea/
+data/*
+drivers/__pycache__/*
+.cloudflaredconfig.yml
+system/*
+Videos/*
+*.h264
+*.mp4
+*.avi

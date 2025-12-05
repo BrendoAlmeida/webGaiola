@@ -1,18 +1,140 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="video-column">
-    <div class="video-panel">
-        <h2>Câmera de Detecção</h2>
-        <img class="video-feed" src="{{ url_for('video_feed') }}" alt="Câmera de Detecção">
+<section class="dashboard">
+    <div class="dashboard-grid">
+        <article class="glass-panel hero-card">
+            <div class="hero-content">
+                <p class="hero-eyebrow">Painel em Tempo Real</p>
+                <h1>Controle total do Project Argus</h1>
+                <p class="hero-description">
+                    Monitore atividade, condições térmicas e comportamentos com uma interface fluida e responsiva.
+                    As transmissões ao vivo e insights inteligentes mantêm você sempre um passo à frente.
+                </p>
+                <div class="hero-tags">
+                    <span class="tag">Visão Computacional</span>
+                    <span class="tag">Sensoriamento Inteligente</span>
+                    <span class="tag">Tempo Real</span>
+                </div>
+            </div>
+            <div class="hero-metrics">
+                <div class="metric">
+                    <span class="metric-label">Sensores ativos</span>
+                    <span class="metric-value" id="metric-sensors-active">—</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Latência média</span>
+                    <span class="metric-value" id="metric-latency">—</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Última captura</span>
+                    <span class="metric-value metric-subtle" id="metric-last-capture">—</span>
+                </div>
+            </div>
+        </article>
+
+        <article class="glass-panel video-card video-primary">
+            <header class="card-header">
+                <div>
+                    <p class="card-eyebrow">Câmera</p>
+                    <h2>Câmera de Detecção</h2>
+                </div>
+                <span class="pill pill-live">AO VIVO</span>
+            </header>
+            <div class="video-wrapper">
+                <img class="video-feed" id="video-stream" alt="Video Stream">
+            </div>
+            <footer class="card-footer">
+                <p>Detecção assistida por IA com rastreamento de comportamento.</p>
+            </footer>
+        </article>
+
+        <article class="glass-panel video-card">
+            <header class="card-header">
+                <div>
+                    <p class="card-eyebrow">Câmera</p>
+                    <h2>Câmera Térmica</h2>
+                </div>
+                <span class="pill">Gradiente térmico</span>
+            </header>
+            <div class="video-wrapper">
+                <img class="video-feed" id="thermal-stream" alt="Thermal Stream">
+            </div>
+            <footer class="card-footer">
+                <p>Mapeamento de temperatura com destaque dinâmico de zonas críticas.</p>
+            </footer>
+        </article>
+
+        <article class="glass-panel video-card">
+            <header class="card-header">
+                <div>
+                    <p class="card-eyebrow">Análise</p>
+                    <h2>Gráficos de Tendência</h2>
+                </div>
+                <span class="pill">Insights</span>
+            </header>
+            <div class="video-wrapper">
+                <img class="video-feed" id="graph-stream" alt="Graph Stream">
+            </div>
+            <footer class="card-footer">
+                <p>Curvas de atividade, padrões térmicos e estatísticas de consumo.</p>
+            </footer>
+        </article>
+
+        <article class="glass-panel insight-card">
+            <header class="card-header">
+                <div>
+                    <p class="card-eyebrow">Insights Inteligentes</p>
+                    <h2>Próximas ações recomendadas</h2>
+                </div>
+            </header>
+            <ul class="insight-list">
+                <li class="insight-item">
+                    <span class="insight-label">Verificar reservatório</span>
+                    <span class="insight-value">12h restantes</span>
+                </li>
+                <li class="insight-item">
+                    <span class="insight-label">Limpeza programada</span>
+                    <span class="insight-value">Amanhã 08:00</span>
+                </li>
+                <li class="insight-item">
+                    <span class="insight-label">Última ingestão de água</span>
+                    <span class="insight-value">há 6 minutos</span>
+                </li>
+            </ul>
+        </article>
+
+        <article class="glass-panel activity-card">
+            <header class="card-header">
+                <div>
+                    <p class="card-eyebrow">Linha do tempo</p>
+                    <h2>Eventos mais recentes</h2>
+                </div>
+            </header>
+            <ul class="timeline">
+                <li>
+                    <span class="timeline-dot"></span>
+                    <div>
+                        <p class="timeline-title">Ajuste automático de temperatura</p>
+                        <p class="timeline-time">há 2 minutos</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="timeline-dot"></span>
+                    <div>
+                        <p class="timeline-title">Detecção de atividade intensa</p>
+                        <p class="timeline-time">há 9 minutos</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="timeline-dot"></span>
+                    <div>
+                        <p class="timeline-title">Reserva de água reabastecida</p>
+                        <p class="timeline-time">há 35 minutos</p>
+                    </div>
+                </li>
+            </ul>
+        </article>
     </div>
-    <div class="video-panel">
-        <h2>Câmera Térmica</h2>
-        <img class="video-feed" src="{{ url_for('thermal_feed') }}" alt="Câmera Térmica">
-    </div>
-    <div class="video-panel">
-        <h2>Graficos</h2>
-        <img class="video-feed" src="{{ url_for('graph_feed') }}" alt="Câmera Térmica">
-    </div>
-</div>
+</section>
 {% endblock %}

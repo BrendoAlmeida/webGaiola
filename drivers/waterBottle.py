@@ -1,54 +1,76 @@
-from gpiozero import Button
+"""Monitoramento do bebedouro baseado em gpiozero."""
+
+from dataclasses import dataclass, field
+import logging
 import threading
-import traceback
 
-BUTTON_PIN = 17
-current_bebedouro_status = "INICIANDO"
-status_lock = threading.Lock()
+from gpiozero import Button
 
-def waterCheck(socketio_app):
-    """Gerencia o monitoramento do bebedouro usando a biblioteca moderna gpiozero."""
 
-    def update_and_emit(new_status):
-        global current_bebedouro_status
-        with status_lock:
-            # Evita emissões desnecessárias se o estado já for o mesmo
-            if current_bebedouro_status == new_status:
-                return
-            current_bebedouro_status = new_status
+LOG = logging.getLogger(__name__)
 
-        print(f"Bebedouro: Status alterado para -> {new_status}")
-        socketio_app.emit('button_status', {'data': new_status})
 
-    def on_press():
-        """Callback para quando o animal está bebendo (botão pressionado)."""
-        update_and_emit('DRINKING')
+@dataclass
+class WaterMonitor:
+    """Encapsula a lógica de monitoramento do bebedouro."""
 
-    def on_release():
-        """Callback para quando o animal não está bebendo (botão solto)."""
-        update_and_emit('NOT')
+    button_pin: int = 17
+    debounce_seconds: float = 0.25
+    _button: Button = field(default=None, init=False, repr=False)
+    _status: str = field(default="INICIANDO", init=False)
+    _status_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
-    try:
-        # pull_up=True corresponde ao seu setup GPIO.PUD_UP.
-        # O botão estará em estado "released" (solto) por padrão.
-        button = Button(BUTTON_PIN, pull_up=True, bounce_time=0.25) # bouncetime em segundos
+    def start(self, socketio_app) -> None:
+        """Inicializa o monitoramento e bloqueia a thread.
 
-        button.when_pressed = on_press
-        button.when_released = on_release
+        Args:
+            socketio_app: Instância de SocketIO usada para emitir eventos.
+        """
 
-        # Envia o estado inicial para o cliente que acabou de se conectar
-        # A lógica no app.py já faz isso, mas podemos garantir aqui também.
-        if button.is_pressed:
-            update_and_emit('DRINKING')
-        else:
-            update_and_emit('NOT')
+        def update_and_emit(new_status: str) -> None:
+            global current_bebedouro_status
+            with self._status_lock:
+                if self._status == new_status:
+                    return
+                self._status = new_status
+                current_bebedouro_status = new_status
 
-        # Mantém a thread principal viva. Os eventos são gerenciados em background pela gpiozero.
-        threading.Event().wait()
+            LOG.info("Bebedouro: status alterado para %s", new_status)
+            socketio_app.emit("button_status", {"data": new_status})
 
-    except Exception as e:
-        print("\n" + "="*50)
-        print("    EXCEÇÃO CRÍTICA NA THREAD DO BEBEDOURO")
-        print(f"   ERRO: {e}")
-        traceback.print_exc()
-        print("="*50 + "\n")
+        def on_press() -> None:
+            update_and_emit("DRINKING")
+
+        def on_release() -> None:
+            update_and_emit("NOT")
+
+        try:
+            self._button = Button(
+                self.button_pin,
+                pull_up=True,
+                bounce_time=self.debounce_seconds,
+            )
+            self._button.when_pressed = on_press
+            self._button.when_released = on_release
+
+            update_and_emit("DRINKING" if self._button.is_pressed else "NOT")
+
+            # Mantém a thread viva enquanto gpiozero gerencia callbacks.
+            threading.Event().wait()
+
+        except Exception:  # pragma: no cover - hardware específico
+            LOG.exception("Exceção crítica na thread do bebedouro")
+
+    def current_status(self) -> str:
+        with self._status_lock:
+            return self._status
+
+
+_MONITOR = WaterMonitor()
+current_bebedouro_status = _MONITOR.current_status()
+
+
+def waterCheck(socketio_app) -> None:
+    """Mantém compatibilidade com a API anterior."""
+
+    _MONITOR.start(socketio_app)
